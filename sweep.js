@@ -1,6 +1,8 @@
 // Barre el saldo de phoenixd (Prospera-Vending-1) hacia una oferta BOLT12.
-// Uso:  node sweep.js --probar   (muestra cuánto enviaría, no envía nada)
-//       node sweep.js            (envía de verdad)
+// Uso:  node sweep.js --probar        (muestra cuánto enviaría, no envía nada)
+//       node sweep.js                 (envía todo el saldo, menos margen de comisión)
+//       node sweep.js 1000            (envía solo 1000 sats, para probar)
+//       node sweep.js 1000 --probar   (muestra la prueba de 1000 sats sin enviar)
 // No necesita dependencias: usa el fetch que trae Node 18+.
 
 const fs = require('fs');
@@ -12,6 +14,8 @@ const MIN_SAT = 1000;          // por debajo de esto no barre
 const FEE_PCT = 0.01;          // margen para comisión de ruteo (1%)
 const FEE_FIX = 10;            // + 10 sats fijos de margen
 const DRY = process.argv.includes('--probar');
+const NUM_ARG = process.argv.slice(2).find(a => /^\d+$/.test(a));
+const FIXED = NUM_ARG ? parseInt(NUM_ARG, 10) : null;   // monto fijo opcional
 
 function die(msg) { console.error('ERROR: ' + msg); process.exit(1); }
 
@@ -46,9 +50,17 @@ async function api(path, form) {
   const balance = bal.body.balanceSat;
   console.log('Saldo en phoenixd: ' + balance + ' sats');
 
-  const amount = Math.floor(balance * (1 - FEE_PCT)) - FEE_FIX;
-  if (amount < MIN_SAT) { console.log('Hay menos de ' + MIN_SAT + ' sats para enviar. No hago nada.'); return; }
-  console.log('Monto a enviar: ' + amount + ' sats (dejo margen para la comisión)');
+  const max = Math.floor(balance * (1 - FEE_PCT)) - FEE_FIX;
+  let amount;
+  if (FIXED !== null) {
+    if (FIXED > max) die('Pediste ' + FIXED + ' sats pero el máximo enviable es ' + max);
+    amount = FIXED;
+    console.log('Monto a enviar (prueba): ' + amount + ' sats');
+  } else {
+    amount = max;
+    if (amount < MIN_SAT) { console.log('Hay menos de ' + MIN_SAT + ' sats para enviar. No hago nada.'); return; }
+    console.log('Monto a enviar: ' + amount + ' sats (dejo margen para la comisión)');
+  }
 
   if (DRY) { console.log('Modo prueba: NO se envió nada.'); return; }
 
